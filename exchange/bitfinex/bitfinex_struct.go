@@ -1,15 +1,11 @@
 package bitfinex
 
 import (
-	"net/url"
-
-	"github.com/gorilla/websocket"
+	"github.com/fberrez/romantic-aggregator/websocket"
 )
 
 type Bitfinex struct {
-	WssUrl       url.URL          `json:"wss_url"`
-	Conn         *websocket.Conn  `json:"conn"`
-	MessageQueue []Message        `json:"message_queue"`
+	Proxy        *websocket.Proxy `json:"proxy"`
 	KafkaChannel chan interface{} `json:"kafka_channel"`
 }
 

@@ -13,22 +13,18 @@ type Fetcher interface {
 	// Initializes the Fetcher and his websocket dialer
 	Initialize(chan interface{}) error
 
-	// It is a loop which receives
-	// and processes the datas (Unmarshal to a struct)
-	Listen(chan struct{})
-
 	// Launches the gorountine "Listen"
 	// and waits for the sigterm
 	// the boolean placed as a defined argument whether it is a test or not
 	Start(bool) error
 
+	// Translates a CurrencySlice (which contains CurrencyPair) to an array of strings.
+	// Adapts each string the specificities of each platform
+	// (ex: GDAX = "BTC-USD", Bitfinex = "tBTCUSD", ...)
 	TranslateCurrency(currency.CurrencySlice) []string
 
 	// Builds a new message to send to the fetcher websocket
-	NewMessage(string, []string, []string)
-
-	// Handles the sigterm
-	Interrupt()
+	SendMessage(string, []string, []string) error
 }
 
 // FetcherGroup contains an array of Fetcher
@@ -70,12 +66,16 @@ func Initialize(kafkaChan chan interface{}) *FetcherGroup {
 
 // Starts eacher Fetcher which are in the FetcherGroup's fetchers
 func (fg *FetcherGroup) Start() {
-	for _, fetcher := range fg.fetchers {
+	for index, fetcher := range fg.fetchers {
 		fg.waitGroup.Add(1)
 
 		go func(fetcher Fetcher) {
 			defer fg.waitGroup.Done()
-			fetcher.Start(false)
+			err := fetcher.Start(false)
+
+			if err != nil {
+				log.Printf("Error occured while trying to start #%v: %v\n", index, err)
+			}
 		}(fetcher)
 	}
 
@@ -84,7 +84,11 @@ func (fg *FetcherGroup) Start() {
 
 // Sends message to each Fetcher's websocket
 func (fg *FetcherGroup) SendMessage(aType string, productIds currency.CurrencySlice, channels []string) {
-	for _, fetcher := range fg.fetchers {
-		fetcher.NewMessage(aType, fetcher.TranslateCurrency(productIds), channels)
+	for index, fetcher := range fg.fetchers {
+		err := fetcher.SendMessage(aType, fetcher.TranslateCurrency(productIds), channels)
+
+		if err != nil {
+			log.Printf("Error occured while trying to send a message #%v: %v\n", index, err)
+		}
 	}
 }

@@ -1,16 +1,13 @@
 package gdax
 
 import (
-	"net/url"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/fberrez/romantic-aggregator/websocket"
 )
 
 type GDAX struct {
-	WssUrl       url.URL          `json:"wss_url"`
-	Conn         *websocket.Conn  `json:"conn"`
-	MessageQueue []Message        `json:"message_queue"`
+	Proxy        *websocket.Proxy `json:"proxy"`
 	KafkaChannel chan interface{} `json:"kafka_channel"`
 }
 

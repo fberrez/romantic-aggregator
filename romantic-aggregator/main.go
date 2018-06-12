@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"sync"
 
 	"github.com/fberrez/romantic-aggregator/currency"
 	"github.com/fberrez/romantic-aggregator/exchange"
@@ -10,6 +11,7 @@ import (
 )
 
 func main() {
+	waitGroup := sync.WaitGroup{}
 
 	kafkaAddr := os.Getenv("KAFKA_ADDRESS")
 
@@ -25,7 +27,18 @@ func main() {
 
 	fg := exchange.Initialize(producer.Channel)
 
-	go producer.Start()
-	fg.SendMessage("subscribe", currency.CurrencySlice{currency.ETHEUR}, []string{"ticker"})
-	fg.Start()
+	waitGroup.Add(2)
+
+	go func() {
+		defer waitGroup.Done()
+		producer.Start()
+	}()
+
+	go func() {
+		defer waitGroup.Done()
+		fg.Start()
+	}()
+
+	fg.SendMessage("subscribe", currency.CurrencySlice{currency.BTCUSD}, []string{"ticker"})
+	waitGroup.Wait()
 }

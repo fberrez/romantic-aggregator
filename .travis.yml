@@ -1,0 +1,28 @@
+sudo: required
+
+language: go
+
+go:
+  - "1.10"
+
+# Only clone the most recent commit.
+git:
+  depth: 1
+
+# Don't email me the results of the test.
+notifications:
+  email: false
+
+env:
+  - KAFKA_ADDRESS=127.0.0.1:9092
+
+services:
+  - docker
+
+# Install dep + dependencies
+ before_install:
+  - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+  - dep ensure
+
+script:
+  - go test -v ./...

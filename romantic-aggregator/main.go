@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fberrez/romantic-aggregator/currency"
 	"github.com/fberrez/romantic-aggregator/exchange"
@@ -39,6 +41,15 @@ func main() {
 		fg.Start()
 	}()
 
-	fg.SendMessage("subscribe", currency.CurrencySlice{currency.BTCUSD}, []string{"ticker"})
+	fmt.Printf("\n\n------------------------------ SUBSCRIBE ETHEUR ------------------------------------\n\n")
+	fg.SendMessage(exchange.Subscribe, currency.CurrencySlice{currency.ETHEUR}, []string{"ticker"})
+
+	time.Sleep(2 * time.Second)
+	fmt.Printf("\n\n------------------------------ SUBSCRIBE BTCEUR ------------------------------------\n\n")
+	fg.SendMessage(exchange.Subscribe, currency.CurrencySlice{currency.BTCEUR}, []string{"ticker"})
+
+	time.Sleep(4 * time.Second)
+	fmt.Printf("\n\n------------------------------ UNSUBSCRIBE ETHEUR ------------------------------------\n\n")
+	fg.SendMessage(exchange.Unsubscribe, currency.CurrencySlice{currency.ETHEUR}, []string{"ticker"})
 	waitGroup.Wait()
 }

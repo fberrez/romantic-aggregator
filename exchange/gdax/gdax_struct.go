@@ -7,14 +7,25 @@ import (
 )
 
 type GDAX struct {
-	Proxy        *websocket.Proxy `json:"proxy"`
-	KafkaChannel chan interface{} `json:"kafka_channel"`
+	Proxy         *websocket.Proxy `json:"proxy"`
+	KafkaChannel  chan interface{} `json:"kafka_channel"`
+	Subscriptions *Message         `json:"subscriptions"`
 }
 
 type Message struct {
 	Type       string   `json:"type"`
 	ProductIds []string `json:"product_ids"`
 	Channels   []string `json:"channels"`
+}
+
+type SubscriptionResponse struct {
+	Type     string                `json:"type"`
+	Channels []ChannelSubscription `json:"channels"`
+}
+
+type ChannelSubscription struct {
+	Name       string   `json:"name"`
+	ProductIds []string `json:"product_ids"`
 }
 
 type Response struct {
@@ -55,9 +66,4 @@ type L2UpdateResponse struct {
 	ProductId string     `json:"product_id"`
 	Time      time.Time  `json:"time"`
 	Changes   [][]string `json:"changes"`
-}
-
-type SubscriptionResponse struct {
-	Type     string   `json:"type"`
-	Channels []string `json:"channels"`
 }

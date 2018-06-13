@@ -37,7 +37,7 @@ func (c CurrencySlice) ToGDAX() []string {
 }
 
 func (c *CurrencyPair) ToBitfinex() string {
-	return fmt.Sprintf("t%v%v", c.FirstCurrency, c.SecondCurrency)
+	return fmt.Sprintf("%v%v", c.FirstCurrency, c.SecondCurrency)
 }
 
 func (c CurrencySlice) ToBitfinex() []string {

@@ -18,6 +18,9 @@ const (
 	Ticker    string = "ticker"
 	Level2    string = "level2"
 	Full      string = "full"
+
+	Subscribe   string = "subscribe"
+	Unsubscribe string = "unsubscribe"
 )
 
 var (
@@ -39,7 +42,7 @@ func (g *GDAX) Initialize(kafkaChannel chan interface{}) error {
 // which will send messages present in the queue
 // and will wait for the SIGINT
 func (g *GDAX) Start(testing bool) error {
-	err := g.IsClean()
+	err := g.isClean()
 
 	// If the GDAX is not clean (see (*GDAX)IsClean definition),
 	// the process returns an error
@@ -53,11 +56,13 @@ func (g *GDAX) Start(testing bool) error {
 	return nil
 }
 
+// Receives response sent by the proxy in the response_channel.
+// Processes each of them before to send them in the kafka channel.
 func (g *GDAX) ListenResponse() {
 	for {
 		select {
 		case response := <-g.Proxy.ResponseChannel:
-			parsedResponse, err := MakeResponse(response)
+			parsedResponse, err := g.makeResponse(response)
 
 			if err != nil {
 				log.Printf("[GDAX] Error occured while listening GDAX Websocket: %v", err)
@@ -73,28 +78,42 @@ func (g *GDAX) ListenResponse() {
 }
 
 // Builds a new message to send and adds it to the queue
-func (g *GDAX) SendMessage(aType string, productIds []string, channels []string) error {
+func (g *GDAX) NewMessage(isSubscribe bool, productIds []string, channels []string) error {
 	message := Message{
-		Type:       aType,
 		ProductIds: productIds,
 		Channels:   channels,
 	}
 
+	switch isSubscribe {
+	case true:
+		message.Type = Subscribe
+	case false:
+		message.Type = Unsubscribe
+	}
+
+	if err := g.sendMessage(message); err != nil {
+		return fmt.Errorf("[GDAX] Error occured while trying to send a message\n\t- message:%v\n\t- err:%v", message, err)
+	}
+
+	return nil
+}
+
+// Sends every messages to the Message Channel.
+// These messages will be send by the proxy to the webocket
+func (g *GDAX) sendMessage(message Message) error {
 	marshalledMessage, err := json.Marshal(message)
 
 	if err != nil {
 		return err
 	}
 
-	// Adds the message to the currenct Subscriptions
-	g.Proxy.Subscriptions = append(g.Proxy.Subscriptions, marshalledMessage)
 	g.Proxy.MessageChannel <- marshalledMessage
 
 	return nil
 }
 
 // Parses the response received to a JSON struct
-func MakeResponse(b []byte) (interface{}, error) {
+func (g *GDAX) makeResponse(b []byte) (interface{}, error) {
 	response := &Response{}
 	err := json.Unmarshal(b, &response)
 
@@ -102,11 +121,12 @@ func MakeResponse(b []byte) (interface{}, error) {
 		return nil, err
 	}
 
-	if response.Type == "subscriptions" || response.Type == "unsubscribe" {
-		return nil, nil
-	}
-
 	var result interface{}
+
+	// If it is a subscriptions feedback
+	if response.Type == "subscriptions" {
+		return g.manageSubscriptions(b)
+	}
 
 	switch response.Type {
 	case "ticker":
@@ -130,11 +150,49 @@ func MakeResponse(b []byte) (interface{}, error) {
 	return result, nil
 }
 
+// Processes the subscription feedback sent by the websocket to the proxy
+// Builds a new ready-to-be-sent message which contains every current subscriptions.
+// Usefull when the websocket is closed.
+func (g *GDAX) manageSubscriptions(b []byte) (interface{}, error) {
+	subscriptionResponse := &SubscriptionResponse{}
+	err := json.Unmarshal(b, &subscriptionResponse)
+
+	if err != nil {
+		return nil, err
+	}
+
+	subscriptionMessage := &Message{
+		Type: Subscribe,
+	}
+
+	for _, channel := range subscriptionResponse.Channels {
+		subscriptionMessage.Channels = append(subscriptionMessage.Channels, channel.Name)
+		for _, productId := range channel.ProductIds {
+			subscriptionMessage.ProductIds = append(subscriptionMessage.ProductIds, productId)
+		}
+	}
+
+	subscriptionMessageByte, err := json.Marshal(subscriptionMessage)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Updates current subscriptions in the exchange side
+	g.Subscriptions = subscriptionMessage
+	// Updates current subscriptions in the proxy side
+	g.Proxy.Subscriptions = append(g.Proxy.Subscriptions, subscriptionMessageByte)
+
+	log.Printf("[GDAX] Current Subscriptions: %v\n", g.Subscriptions)
+
+	return subscriptionMessage, nil
+}
+
 // Returns false if at least one of these condition is verified:
 // 	- The GDAX structure has not been initialized
 // 	- The Kafka channel has not been initialized
 // 	- The Proxy has not been initialized or is nil
-func (g *GDAX) IsClean() error {
+func (g *GDAX) isClean() error {
 	if reflect.DeepEqual(g, &GDAX{}) {
 		return errors.New("[GDAX] GDAX structure cannot be nil\n")
 	}

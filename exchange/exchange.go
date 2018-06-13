@@ -24,7 +24,7 @@ type Fetcher interface {
 	TranslateCurrency(currency.CurrencySlice) []string
 
 	// Builds a new message to send to the fetcher websocket
-	SendMessage(string, []string, []string) error
+	NewMessage(bool, []string, []string) error
 }
 
 // FetcherGroup contains an array of Fetcher
@@ -42,6 +42,11 @@ var (
 	}
 )
 
+const (
+	Subscribe   bool = true
+	Unsubscribe bool = false
+)
+
 // Initializes a FetcherGroup and
 // each Fetcher which are in the FetcherGroup's fetchers
 func Initialize(kafkaChan chan interface{}) *FetcherGroup {
@@ -55,7 +60,7 @@ func Initialize(kafkaChan chan interface{}) *FetcherGroup {
 		err := driver.Initialize(fg.kafkaChannel)
 
 		if err != nil {
-			log.Printf("Error occured while initializing %s: %v\n", driverName, err)
+			log.Printf("Error occured while initializing %s:\n %v\n", driverName, err)
 		} else {
 			fg.fetchers = append(fg.fetchers, driver)
 		}
@@ -74,7 +79,7 @@ func (fg *FetcherGroup) Start() {
 			err := fetcher.Start(false)
 
 			if err != nil {
-				log.Printf("Error occured while trying to start #%v: %v\n", index, err)
+				log.Printf("Error occured while trying to start #%v:\n %v\n", index, err)
 			}
 		}(fetcher)
 	}
@@ -83,12 +88,12 @@ func (fg *FetcherGroup) Start() {
 }
 
 // Sends message to each Fetcher's websocket
-func (fg *FetcherGroup) SendMessage(aType string, productIds currency.CurrencySlice, channels []string) {
+func (fg *FetcherGroup) SendMessage(isSubscribe bool, productIds currency.CurrencySlice, channels []string) {
 	for index, fetcher := range fg.fetchers {
-		err := fetcher.SendMessage(aType, fetcher.TranslateCurrency(productIds), channels)
+		err := fetcher.NewMessage(isSubscribe, fetcher.TranslateCurrency(productIds), channels)
 
 		if err != nil {
-			log.Printf("Error occured while trying to send a message #%v: %v\n", index, err)
+			log.Printf("Error occured while trying to send a message #%v:\n %v\n", index, err)
 		}
 	}
 }

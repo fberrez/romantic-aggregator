@@ -5,14 +5,20 @@ import (
 )
 
 type Bitfinex struct {
-	Proxy        *websocket.Proxy `json:"proxy"`
-	KafkaChannel chan interface{} `json:"kafka_channel"`
+	Proxy         *websocket.Proxy    `json:"proxy"`
+	KafkaChannel  chan interface{}    `json:"kafka_channel"`
+	Subscriptions []SubscribeResponse `json:"subscriptions"`
 }
 
 type Message struct {
 	Event   string `json:"event"`
 	Channel string `json:"channel"`
 	Symbol  string `json:"symbol"`
+}
+
+type UnsubscribeMessage struct {
+	Event  string `json:"event"`
+	ChanId int    `json:"chanId"`
 }
 
 type TickerResponse struct {
@@ -27,4 +33,17 @@ type TickerResponse struct {
 	Volume          float64 `json:"volume"`
 	High            float64 `json:"high"`
 	Low             float64 `json:"low"`
+}
+
+type SubscribeResponse struct {
+	Event   string `json:"event"`
+	Channel string `json:"channel"`
+	ChanId  int    `json:"chanId"`
+	Pair    string `json:"pair"`
+}
+
+type UnsubscribeResponse struct {
+	Event  string `json:"event"`
+	Status string `json:"status"`
+	ChanId int    `json:"ChanId"`
 }

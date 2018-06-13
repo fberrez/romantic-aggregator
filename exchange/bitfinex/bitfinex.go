@@ -18,6 +18,12 @@ const (
 	Book   string = "book"
 	Trade  string = "trades"
 	Ticker string = "ticker"
+
+	Subscribe   string = "subscribe"
+	Unsubscribe string = "unsubscribe"
+
+	Subscribed   string = "subscribed"
+	Unsubscribed string = "unsubscribed"
 )
 
 var (
@@ -49,7 +55,6 @@ func (b *Bitfinex) Start(testing bool) error {
 
 	go b.ListenResponse()
 	b.Proxy.Start(testing)
-
 	return nil
 }
 
@@ -59,7 +64,7 @@ func (b *Bitfinex) ListenResponse() {
 	for {
 		select {
 		case response := <-b.Proxy.ResponseChannel:
-			parsedResponse, err := MakeResponse(response)
+			parsedResponse, err := b.makeResponse(response)
 
 			if err != nil {
 				log.Printf("[Bitfinex] Error occured while listening Bitfinex Websocket: %v", err)
@@ -75,43 +80,94 @@ func (b *Bitfinex) ListenResponse() {
 }
 
 // Builds a new message to send and adds it to the queue
-func (b *Bitfinex) SendMessage(aEvent string, symbols []string, channels []string) error {
+func (b *Bitfinex) NewMessage(isSubscribe bool, symbols []string, channels []string) error {
 	for _, symbol := range symbols {
 		for _, channel := range channels {
-			message := Message{
-				Event:   aEvent,
-				Symbol:  symbol,
-				Channel: channel,
+			var message interface{}
+
+			if isSubscribe {
+				message = Message{
+					Event:   Subscribe,
+					Symbol:  symbol,
+					Channel: channel,
+				}
+			} else {
+				// If it the message is a unsubscribe one,
+				// we need to get the id of chan we want to remove
+				chanId, err := b.getChanId(channel, symbol)
+
+				if err != nil {
+					return err
+				}
+
+				message = UnsubscribeMessage{
+					Event:  Unsubscribe,
+					ChanId: chanId,
+				}
 			}
 
-			marshalledMessage, err := json.Marshal(message)
+			messageByte, err := json.Marshal(message)
 
 			if err != nil {
-				return err
+				return fmt.Errorf("[Bitfinex] An error occured while trying to send a new message:\n\t- message: %v\n\t- error: %v", message, err)
 			}
 
-			// Adds the message to the currenct Subscriptions
-			b.Proxy.Subscriptions = append(b.Proxy.Subscriptions, marshalledMessage)
-			b.Proxy.MessageChannel <- marshalledMessage
+			b.Proxy.MessageChannel <- messageByte
 		}
 	}
 
 	return nil
 }
 
+// Sends every messages to the Message Channel.
+// These messages will be send by the proxy to the webocket
+func (b *Bitfinex) sendMessage(message Message) error {
+	marshalledMessage, err := json.Marshal(message)
+
+	if err != nil {
+		return err
+	}
+
+	b.Proxy.MessageChannel <- marshalledMessage
+
+	return nil
+}
+
 // Parses the response received to a JSON struct
-func MakeResponse(b []byte) (interface{}, error) {
-	byteString := string(b)
+func (b *Bitfinex) makeResponse(data []byte) (interface{}, error) {
+	byteString := string(data)
+
+	switch byteString[0] {
+	// a '[' is the first character of a ticker response
+	case '[':
+		return makeTickerResponse(data)
+		// a '{' is the first character of a (un)subscribe reponse
+	case '{':
+		return b.manageSubscriptions(data)
+	}
+
+	return nil, fmt.Errorf("[Bitfinex] Cannot understand this following answer: %v", string(data))
+}
+
+func makeTickerResponse(data []byte) (interface{}, error) {
+	byteString := string(data)
+	// Removes the first and the last character of the response which are "[]"
 	byteString = byteString[1:]
 	byteString = byteString[:len(byteString)-1]
-	response := strings.Split(byteString, ",")
 
+	// Splits the string
+	response := strings.Split(byteString, ",")
+	// If the first element of the array is "hb",
+	// it means that there is nothing new
 	if response[1] == "hb" || len(response) != 11 {
 		return nil, nil
 	}
 
+	// Array which will contain the strings which were in the splitted array,
+	// converted to float64
 	responseFloats := []float64{}
 
+	// Converts each strings to float64
 	for _, resp := range response {
 		respFloats, err := strconv.ParseFloat(resp, 64)
 
@@ -122,6 +178,7 @@ func MakeResponse(b []byte) (interface{}, error) {
 		responseFloats = append(responseFloats, respFloats)
 	}
 
+	// Builds the Ticker Response
 	result := &TickerResponse{
 		ChannelId:       int(responseFloats[0]),
 		Bid:             responseFloats[1],
@@ -137,6 +194,108 @@ func MakeResponse(b []byte) (interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// Manages subscriptions, whether subscribing or unsubscribing
+func (b *Bitfinex) manageSubscriptions(data []byte) (interface{}, error) {
+	dataJSON := &struct {
+		Event string
+	}{}
+	err := json.Unmarshal(data, dataJSON)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Determines the event of the response ("subscribed" or "unsubscribed")
+	switch dataJSON.Event {
+	case Subscribed:
+		response := SubscribeResponse{}
+		if err = json.Unmarshal(data, &response); err != nil {
+			return nil, err
+		}
+
+		b.manageSubscribe(response)
+	case Unsubscribed:
+		response := UnsubscribeResponse{}
+
+		if err = json.Unmarshal(data, &response); err != nil {
+			return nil, err
+		}
+
+		b.manageUnsubscribe(response)
+	}
+
+	log.Printf("[Bitfinex] Current Subscriptions: %v\n", b.Subscriptions)
+
+	return nil, nil
+}
+
+// Adds the new subscription to the list of current subscriptions
+// and updates the subscriptions in the proxy side
+func (b *Bitfinex) manageSubscribe(subscribeResponse SubscribeResponse) error {
+	b.Subscriptions = append(b.Subscriptions, subscribeResponse)
+	return b.updateSubscriptions()
+}
+
+// Remove the subscription, determined by the unsubscribe response,
+// from the list of current subscriptions.
+// Updates the subscriptions in the proxy side
+func (b *Bitfinex) manageUnsubscribe(unsubscribeResponse UnsubscribeResponse) error {
+	for i, sub := range b.Subscriptions {
+		if sub.ChanId == unsubscribeResponse.ChanId {
+			b.Subscriptions = append(b.Subscriptions[:i], b.Subscriptions[i+1:]...)
+			break
+		}
+	}
+
+	return b.updateSubscriptions()
+}
+
+// Returns the channel id of the subscription
+// which manage the channel and the pair which are in arguments
+// Returns -1 if the channel id cannot be found
+func (b *Bitfinex) getChanId(channel string, pair string) (int, error) {
+	for _, sub := range b.Subscriptions {
+		if sub.Channel == channel && sub.Pair == pair {
+			return sub.ChanId, nil
+		}
+	}
+
+	return -1, fmt.Errorf("[Bitfinex] Cannot find ChanId:\n\t- (channel, pair): (%v, %v)\n\t- Current Subscriptions: %v", channel, pair, b.Subscriptions)
+}
+
+// Adds or removes subscriptions on the proxy side
+func (b *Bitfinex) updateSubscriptions() error {
+	b.Proxy.Subscriptions = [][]byte{}
+	// Go throught the list
+	for _, sub := range b.Subscriptions {
+		var event string
+
+		// Determines the event of the new message
+		switch sub.Event {
+		case Subscribed:
+			event = Subscribe
+		case Unsubscribed:
+			event = Unsubscribed
+		}
+
+		newSub := &Message{
+			Event:   event,
+			Channel: sub.Channel,
+			Symbol:  sub.Pair,
+		}
+
+		// Converts the message struct to []data
+		newSubByte, err := json.Marshal(newSub)
+		if err != nil {
+			return err
+		}
+
+		b.Proxy.Subscriptions = append(b.Proxy.Subscriptions, newSubByte)
+	}
+
+	return nil
 }
 
 // Returns false if at least one of these condition is verified:

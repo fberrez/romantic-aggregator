@@ -22,7 +22,6 @@ type Proxy struct {
 	// Channel which send responses (sent by the websocket) to the exchange
 	ResponseChannel chan []byte `json:"response_channel"`
 
-	// Array which contains every message which have been sent
 	Subscriptions [][]byte `json:"subscriptions"`
 }
 
@@ -53,14 +52,13 @@ func (p *Proxy) Start(testing bool) {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	done := make(chan struct{})
 	log.Printf("[%v Proxy] Connecting to %s\n", p.Label, p.WssUrl.String())
 
 	// Listen and process every datas
 	// received by the connection to the websocket.
 	// If the connection is closed by the websocket,
 	// the go routine is restarted with a new connection
-	go p.Recoverer(-1, "ListenWebSocket", p.ListenWebsocket, done)
+	go p.Recoverer(p.ListenWebsocket)
 
 	// In case of testing, a SIGINT is send to the `interrupt` channel
 	// to stop this process
@@ -90,55 +88,49 @@ func (p *Proxy) Start(testing bool) {
 				continue
 			}
 			return
-
-			// 	// If the done channel is closed by the listening go routine
-			// case <-done:
-			// 	log.Printf("[%v Proxy] Closing Websocket because of an error\n", p.Label)
-			// 	return
 		}
 	}
 }
 
 // Listens the websocket and processes datas it receives
 // before to send it to the response channel
-func (p *Proxy) ListenWebsocket(done chan struct{}) {
+func (p *Proxy) ListenWebsocket() {
 	log.Printf("[%v Proxy] Listenning to %s\n", p.Label, p.WssUrl.String())
-	defer close(done)
 
 	for {
 		_, message, err := p.Conn.ReadMessage()
+
 		if err != nil {
-			log.Printf("[%v Proxy] Error occured while listening the websocket: %v\n\tmessage: %v\n", p.Label, err, message)
-			return
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+				panic(fmt.Sprintf("[%v Proxy] Error occured while listening the websocket: %v\n\tmessage: %v\n", p.Label, err, message))
+			} else {
+				log.Printf("[%v Proxy] Websocket closed by client: %s", p.Label, err)
+			}
 		}
 
 		p.ResponseChannel <- message
 	}
 }
 
-// Handles if the listening go routine stopped
-// Restarts it when it's occured
-func (p *Proxy) Recoverer(maxPanics int, label string, f func(chan struct{}), done chan struct{}) {
+func (p *Proxy) Recoverer(f func()) {
 	defer func() {
-		if maxPanics == 0 {
-			log.Printf("[%v Proxy] Too many panics on %v.\n", p.Label, label)
-		} else {
-			log.Printf("[%v Proxy] An error occured, Restarting %v.\n", p.Label, label)
+		if err := recover(); err != nil {
+			log.Printf("[%s Proxy] An error occured in the recoverer:\n\t- err: %v\n", p.Label, err)
 			c, _, err := websocket.DefaultDialer.Dial(p.WssUrl.String(), nil)
+
 			if err != nil {
-				log.Printf("[%v Proxy] Cannot open a new connection.\n", p.Label)
-				return
+				log.Printf("[%s Proxy] Cannot open a new connection with %s. Closing %s.", p.Label, p.WssUrl.String(), p.Label)
 			}
 
 			p.Conn = c
-			done = make(chan struct{})
-			for _, msg := range p.Subscriptions {
-				p.MessageChannel <- msg
+			for _, messageToSend := range p.Subscriptions {
+				p.MessageChannel <- messageToSend
 			}
-			go p.Recoverer(maxPanics-1, "ListenWebsocket", f, done)
+			go p.Recoverer(f)
+
 		}
 	}()
-	f(done)
+	f()
 }
 
 // Returns false if at least one of these condition is verified:

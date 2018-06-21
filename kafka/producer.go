@@ -2,11 +2,9 @@ package kafka
 
 import (
 	"encoding/json"
-	"log"
-	"os"
-	"os/signal"
 
 	"github.com/Shopify/sarama"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -17,9 +15,14 @@ const (
 // and a channel through which messages will be sent
 // from the exchangers to the kafka stream
 type AggregatorProducer struct {
-	Producer sarama.AsyncProducer
-	Channel  chan interface{}
+	Producer         sarama.AsyncProducer
+	Channel          chan interface{}
+	InterruptChannel chan bool
 }
+
+var (
+	log *logrus.Entry = logrus.WithFields(logrus.Fields{"element": "kafka"})
+)
 
 // Initializes the Aggregator Producer
 func Initialize(addr string) (*AggregatorProducer, error) {
@@ -29,8 +32,9 @@ func Initialize(addr string) (*AggregatorProducer, error) {
 	}
 
 	aggrProd := &AggregatorProducer{
-		Producer: producer,
-		Channel:  make(chan interface{}),
+		Producer:         producer,
+		Channel:          make(chan interface{}),
+		InterruptChannel: make(chan bool),
 	}
 
 	return aggrProd, nil
@@ -38,12 +42,10 @@ func Initialize(addr string) (*AggregatorProducer, error) {
 
 // Starts the loop which will handle the messages stream and the sigterm
 func (p *AggregatorProducer) Start() {
-	defer p.Close()
-
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
+	defer p.Stop()
 
 	var enqueued, errors int
+
 ProducerLoop:
 	for {
 		select {
@@ -53,21 +55,23 @@ ProducerLoop:
 			p.SendMessage(message)
 			// Handles errors
 		case err := <-p.Producer.Errors():
-			log.Println("Failed to produce message", err)
+			log.WithFields(logrus.Fields{"error": err}).Errorf("Failed to produce message")
 			errors++
 			// Handles sigterm
-		case <-signals:
-			break ProducerLoop
+		case signal := <-p.InterruptChannel:
+			if signal {
+				break ProducerLoop
+			}
 		}
 	}
 
-	log.Printf("Enqueued: %d; errors: %d\n", enqueued, errors)
+	log.WithFields(logrus.Fields{"enqueued": enqueued, "errors": errors}).Infof("Closing Kafka producer")
 
 }
 
 // Sends messages to the kafka stream
 func (p *AggregatorProducer) SendMessage(message interface{}) error {
-	messageJSON, err := json.Marshal(message)
+	marshalledMessage, err := json.Marshal(message)
 
 	if err != nil {
 		return err
@@ -77,7 +81,7 @@ func (p *AggregatorProducer) SendMessage(message interface{}) error {
 	// which contains the topic name and the message
 	producerMess := &sarama.ProducerMessage{
 		Topic: TopicAggregator,
-		Value: sarama.StringEncoder(string(messageJSON)),
+		Value: sarama.StringEncoder(string(marshalledMessage)),
 	}
 
 	p.Producer.Input() <- producerMess
@@ -86,6 +90,7 @@ func (p *AggregatorProducer) SendMessage(message interface{}) error {
 }
 
 // Handles the sigterm
-func (p *AggregatorProducer) Close() error {
+func (p *AggregatorProducer) Stop() error {
+	p.InterruptChannel <- true
 	return p.Producer.Close()
 }

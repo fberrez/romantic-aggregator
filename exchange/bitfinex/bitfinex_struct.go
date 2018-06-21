@@ -1,13 +1,15 @@
 package bitfinex
 
 import (
+	"github.com/fberrez/romantic-aggregator/aggregator"
 	"github.com/fberrez/romantic-aggregator/websocket"
 )
 
 type Bitfinex struct {
-	Proxy         *websocket.Proxy    `json:"proxy"`
-	KafkaChannel  chan interface{}    `json:"kafka_channel"`
-	Subscriptions []SubscribeResponse `json:"subscriptions"`
+	Proxy             *websocket.Proxy             `json:"proxy"`
+	AggregatorChannel chan aggregator.SimpleTicker `json:"aggregator_channel"`
+	Subscriptions     []SubscribeResponse          `json:"subscriptions"`
+	InterruptChannel  chan bool                    `json:"interrupt_channel"`
 }
 
 type Message struct {

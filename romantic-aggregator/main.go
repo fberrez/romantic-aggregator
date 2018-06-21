@@ -1,55 +1,59 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"sync"
-	"time"
 
-	"github.com/fberrez/romantic-aggregator/currency"
-	"github.com/fberrez/romantic-aggregator/exchange"
-	"github.com/fberrez/romantic-aggregator/kafka"
+	"github.com/fberrez/romantic-aggregator/api"
+	"github.com/sirupsen/logrus"
 )
 
+var (
+	log *logrus.Entry = logrus.WithFields(logrus.Fields{"element": "romantic-aggregator"})
+)
+
+func init() {
+	logrus.SetFormatter(&logrus.TextFormatter{})
+	logrus.SetOutput(os.Stdout)
+	logrus.SetLevel(logrus.DebugLevel)
+}
+
 func main() {
-	waitGroup := sync.WaitGroup{}
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
 
-	kafkaAddr := os.Getenv("KAFKA_ADDRESS")
+	a := api.Initiliaze()
 
-	if kafkaAddr == "" {
-		log.Fatal("Please, export KAFKA_ADDRESS. Try `export KAFKA_ADDRESS=XXX.XXX.XXX.XXX:9092` OR `-e KAFKA_ADDRESS=XXX.XXX.XXX.XXX:9092` if you're running it with Docker")
+	srv := &http.Server{
+		Addr:    ":4242",
+		Handler: a.Fizz,
 	}
 
-	producer, err := kafka.Initialize(kafkaAddr)
+	waitGroupApi := sync.WaitGroup{}
 
-	if err != nil {
-		panic(err)
-	}
-
-	fg := exchange.Initialize(producer.Channel)
-
-	waitGroup.Add(2)
+	a.Start(waitGroupApi)
 
 	go func() {
-		defer waitGroup.Done()
-		producer.Start()
+		for {
+			select {
+			case <-interrupt:
+				a.Stop()
+				waitGroupApi.Wait()
+				log.Info("Stopping server")
+				err := srv.Close()
+
+				if err != nil {
+					log.Error("Error server: %v", err)
+					os.Exit(1)
+				}
+
+				os.Exit(0)
+			}
+		}
 	}()
 
-	go func() {
-		defer waitGroup.Done()
-		fg.Start()
-	}()
+	srv.ListenAndServe()
 
-	fmt.Printf("\n\n------------------------------ SUBSCRIBE ETHEUR ------------------------------------\n\n")
-	fg.SendMessage(exchange.Subscribe, currency.CurrencySlice{currency.ETHEUR}, []string{"ticker"})
-
-	time.Sleep(2 * time.Second)
-	fmt.Printf("\n\n------------------------------ SUBSCRIBE BTCEUR ------------------------------------\n\n")
-	fg.SendMessage(exchange.Subscribe, currency.CurrencySlice{currency.BTCEUR}, []string{"ticker"})
-
-	time.Sleep(4 * time.Second)
-	fmt.Printf("\n\n------------------------------ UNSUBSCRIBE ETHEUR ------------------------------------\n\n")
-	fg.SendMessage(exchange.Unsubscribe, currency.CurrencySlice{currency.ETHEUR}, []string{"ticker"})
-	waitGroup.Wait()
 }

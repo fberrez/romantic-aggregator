@@ -1,14 +1,12 @@
 package websocket
 
 import (
-	"fmt"
-	"log"
 	"net/url"
-	"os"
-	"os/signal"
 	"reflect"
 
 	"github.com/gorilla/websocket"
+	"github.com/juju/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Proxy struct {
@@ -22,12 +20,22 @@ type Proxy struct {
 	// Channel which send responses (sent by the websocket) to the exchange
 	ResponseChannel chan []byte `json:"response_channel"`
 
+	// Receives the SIGINT
+	InterruptChannel chan bool `json:"interrupt_channel"`
+
+	// Current subscriptions in byte
+	// (usefull when the websocket has been closed by the host)
 	Subscriptions [][]byte `json:"subscriptions"`
+
+	log *logrus.Entry
 }
 
 // Initializes the Proxy struct
-func (p *Proxy) Initialize(uri url.URL, kafkaChannel chan interface{}) error {
-	log.Printf("[%v Proxy] Initializing proxy\n", p.Label)
+func (p *Proxy) Initialize(uri url.URL) error {
+	p.log = logrus.WithFields(logrus.Fields{"element": "proxy", "label": p.Label})
+
+	p.log.Infof("Initializing proxy")
+
 	c, _, err := websocket.DefaultDialer.Dial(uri.String(), nil)
 
 	if err != nil {
@@ -38,6 +46,7 @@ func (p *Proxy) Initialize(uri url.URL, kafkaChannel chan interface{}) error {
 	p.Conn = c
 	p.MessageChannel = make(chan []byte)
 	p.ResponseChannel = make(chan []byte)
+	p.InterruptChannel = make(chan bool)
 	p.Subscriptions = [][]byte{}
 
 	return nil
@@ -48,24 +57,14 @@ func (p *Proxy) Initialize(uri url.URL, kafkaChannel chan interface{}) error {
 //  - Receiving message in the MessageChannel
 //  - Receiving a SIGINT
 //  - Done chan closed by the listening go routine
-func (p *Proxy) Start(testing bool) {
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
-	log.Printf("[%v Proxy] Connecting to %s\n", p.Label, p.WssUrl.String())
+func (p *Proxy) Start() {
+	p.log.WithFields(logrus.Fields{"url": p.WssUrl.String()}).Infof("Connecting...")
 
 	// Listen and process every datas
 	// received by the connection to the websocket.
 	// If the connection is closed by the websocket,
 	// the go routine is restarted with a new connection
-	go p.Recoverer(p.ListenWebsocket)
-
-	// In case of testing, a SIGINT is send to the `interrupt` channel
-	// to stop this process
-	if testing {
-		log.Printf("[%v Proxy] Closing test\n", p.Label)
-		interrupt <- os.Interrupt
-	}
+	go p.ListenWebsocket()
 
 	for {
 		select {
@@ -73,21 +72,23 @@ func (p *Proxy) Start(testing bool) {
 		// If a new message arrives in the MessageChannel,
 		// it is sent to the websocket
 		case msg := <-p.MessageChannel:
-			log.Printf("[%v Proxy] Sending message to Websocket: %v\n", p.Label, string(msg))
+			p.log.WithFields(logrus.Fields{"message": string(msg)}).Infof("Sending message to Websocket")
 			if err := p.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				log.Printf("[%v Proxy] Error occured while sending message to Websocket: %v\n", p.Label, err)
+				p.log.WithFields(logrus.Fields{"error": err}).Infof("Error occured while sending message to Websocket")
 				continue
 			}
 
 			// If a SIGINT is received, it closes the connection
-		case <-interrupt:
-			log.Printf("[%v Proxy] Closing Websocket\n", p.Label)
-			err := p.Conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			if err != nil {
-				log.Printf("[%v Proxy] Error occured while closing the Websocket: %v\n", p.Label, err)
-				continue
+		case interrupt := <-p.InterruptChannel:
+			if interrupt {
+				p.log.Infof("Closing Websocket")
+				err := p.Conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				if err != nil {
+					p.log.WithFields(logrus.Fields{"error": err}).Errorf("Error occured while closing the Websocket")
+					continue
+				}
+				return
 			}
-			return
 		}
 	}
 }
@@ -95,42 +96,37 @@ func (p *Proxy) Start(testing bool) {
 // Listens the websocket and processes datas it receives
 // before to send it to the response channel
 func (p *Proxy) ListenWebsocket() {
-	log.Printf("[%v Proxy] Listenning to %s\n", p.Label, p.WssUrl.String())
+	p.log.Infof("Listening to %s", p.WssUrl.String())
 
+ListeningLoop:
 	for {
 		_, message, err := p.Conn.ReadMessage()
 
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
-				panic(fmt.Sprintf("[%v Proxy] Error occured while listening the websocket: %v\n\tmessage: %v\n", p.Label, err, message))
-			} else {
-				log.Printf("[%v Proxy] Websocket closed by client: %s", p.Label, err)
+			if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+				p.log.WithFields(logrus.Fields{"message": err}).Infof("Websocket closed by client")
+				break ListeningLoop
 			}
-		}
 
-		p.ResponseChannel <- message
-	}
-}
-
-func (p *Proxy) Recoverer(f func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("[%s Proxy] An error occured in the recoverer:\n\t- err: %v\n", p.Label, err)
 			c, _, err := websocket.DefaultDialer.Dial(p.WssUrl.String(), nil)
 
 			if err != nil {
-				log.Printf("[%s Proxy] Cannot open a new connection with %s. Closing %s.", p.Label, p.WssUrl.String(), p.Label)
+				p.log.Error("Cannot open a new connection with %s. Closing %s.", p.WssUrl.String(), p.Label)
+				break ListeningLoop
 			}
 
 			p.Conn = c
 			for _, messageToSend := range p.Subscriptions {
 				p.MessageChannel <- messageToSend
 			}
-			go p.Recoverer(f)
+
+			p.log.Warnf("Restarting websocket client")
+			p.ListenWebsocket()
 
 		}
-	}()
-	f()
+
+		p.ResponseChannel <- message
+	}
 }
 
 // Returns false if at least one of these condition is verified:
@@ -139,16 +135,20 @@ func (p *Proxy) Recoverer(f func()) {
 // 	- The connection has not been initialized or is nil
 func (p *Proxy) IsClean() error {
 	if reflect.DeepEqual(p, &Proxy{}) {
-		return fmt.Errorf("[%v Proxy] GDAX structure cannot be nil\n", p.Label)
+		return errors.NotAssignedf("%v proxy: structure cannot be nil", p.Label)
 	}
 
 	if (p.WssUrl == url.URL{}) {
-		return fmt.Errorf("[%v Proxy] %v structure doesn't have a good Websocket URL\n", p.Label, p.Label)
+		return errors.NotAssignedf("%v proxy: structure doesn't have a good Websocket URL", p.Label)
 	}
 
 	if p.Conn == nil || reflect.DeepEqual(p.Conn, &websocket.Conn{}) {
-		return fmt.Errorf("[%v Proxy] %v structure doesn't have any connection etablished with the websocket\n", p.Label, p.Label)
+		return errors.NotAssignedf("%v proxy: structure doesn't have any connection etablished with the websocket", p.Label)
 	}
 
 	return nil
+}
+
+func (p *Proxy) Interrupt() {
+	p.InterruptChannel <- true
 }

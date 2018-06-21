@@ -1,15 +1,15 @@
 package gdax
 
 import (
-	"time"
-
+	"github.com/fberrez/romantic-aggregator/aggregator"
 	"github.com/fberrez/romantic-aggregator/websocket"
 )
 
 type GDAX struct {
-	Proxy         *websocket.Proxy `json:"proxy"`
-	KafkaChannel  chan interface{} `json:"kafka_channel"`
-	Subscriptions *Message         `json:"subscriptions"`
+	Proxy             *websocket.Proxy             `json:"proxy"`
+	AggregatorChannel chan aggregator.SimpleTicker `json:"aggregator_channel"`
+	Subscriptions     *Message                     `json:"subscriptions"`
+	InterruptChannel  chan bool                    `json:"interrupt_channel"`
 }
 
 type Message struct {
@@ -32,14 +32,6 @@ type Response struct {
 	Type string `json:"type"`
 }
 
-type HeartbeatResponse struct {
-	Type        string    `json:"type"`
-	Sequence    int       `json:"sequence"`
-	LastTradeId int       `json:"last_trade_id"`
-	ProductId   string    `json:"product_id"`
-	Time        time.Time `json:"time"`
-}
-
 type TickerResponse struct {
 	Type      string `json:"type"`
 	Sequence  int    `json:"sequence"`
@@ -54,16 +46,12 @@ type TickerResponse struct {
 	BestAsk   string `json:"best_ask"`
 }
 
-type SnapshotResponse struct {
-	Type      string     `json:"type"`
-	ProductId string     `json:"product_id"`
-	Bids      [][]string `json:"bids"`
-	Asks      [][]string `json:"asks"`
-}
-
-type L2UpdateResponse struct {
-	Type      string     `json:"type"`
-	ProductId string     `json:"product_id"`
-	Time      time.Time  `json:"time"`
-	Changes   [][]string `json:"changes"`
+type TickerApiResponse struct {
+	TradeId int    `json:"trade_id"`
+	Price   string `json:"price"`
+	Size    string `json:"size"`
+	Bid     string `json:"bid"`
+	Ask     string `json:"ask"`
+	Volume  string `json:"volume"`
+	Time    string `json:"time"`
 }

@@ -45,7 +45,7 @@ Roadmap
 | Status | Module | Goals | Description |
 | :---: | :---: | :---: | :---: |
 | ❌ | **Romantic** | 0 / X | Core of the project, will receive datas and make every orders for you  |
-| 🚀 | **[Romantic Aggregator](#romantic-aggregator)** | 1 / 3 | Receive tickers from exchanges Websocket |
+| 🚀 | **[Romantic Aggregator](#romantic-aggregator)** | 60% | Receive tickers from exchanges Websocket |
 | ❌ | **Romantic Hermes** | 0 / X | Hermes will draw the link between Romantic and each of the exchanges API to make every orders (buy/sell) |
 | ❌ | **Romantic Front-end** | 0 / X | Whether it's done through a chat application or an interface, this will handle the commands made by the users |
 | ❌ | **Romantic Warehouse** | 0 / X | Will manage the database |
@@ -64,21 +64,45 @@ Roadmap of Romantic Aggregator
 
 | Status | Goal | Description |
 | :---: | :---: | :---: |
-| ✔ | **Exchanges** | Manages the APIs of exchange platforms (Send subscription and unsubscribe messages and receive datas). The status depends on the number of platforms to add. |
-| 80% | **Kafka** | Sends messages to the Kafka stream |
-| ❌ | **API** | Receives orders from the Romantic Core or other HTTP requests (subscriptions/unsubscribe) |
+| 8% | **Exchanges** | Manages the APIs of exchange platforms (Send subscription and unsubscribe messages and receive datas). The status depends on the number of platforms to add. |
+| ✔ | **Kafka** | Sends messages to the Kafka stream |
+| ✔ | **API** | Receives orders from the Romantic Core or other HTTP requests (subscriptions/unsubscribe) |
+| ✔ | **Aggregator** | Receives tickers from websocket clients of each exchanges and aggregates before sending them to Kafka |
 | 🚀 | **Test** | [Actual coverage](#current-test-coverage) |
 
+List of exchanges
+
+| Status | Name |
+| :---: | :---: |
+|✔|[Bitfinex](https://www.bitfinex.com/)|
+|✔|[GDAX](https://www.gdax.com/)|
+|❌|[Alphapoint](https://www.alphapoint.com/)|
+|❌|[ANX](https://anxpro.com/)|
+|❌|[Binance](https://www.binance.com/)|
+|❌|[Bitflyer](https://bitflyer.com/en-jp/)|
+|❌|[Bithumb](https://www.bithumb.com/)|
+|❌|[Bitstamp](https://www.bitstamp.net/)|
+|❌|[Bittrex](https://bittrex.com/)|
+|❌|[BTC Markets](https://www.btcmarkets.net/)|
+|❌|[Coinut](https://coinut.com/)|
+|❌|[Exmo](https://exmo.com/)|
+|❌|[Gemini](https://gemini.com/)|
+|❌|[HitBTC](https://hitbtc.com/)|
+|❌|[Huobi](https://www.huobi.pro/)|
+|❌|[Itbit](https://www.itbit.com/)|
+|❌|[Kraken](https://www.kraken.com/)|
+|❌|[LakeBTC](https://www.lakebtc.com/)|
+|❌|[Liqui](https://liqui.io/)|
+|❌|[LocalBitcoins](https://localbitcoins.com/)|
+|❌|[OkCoin](https://www.okcoin.com/)|
+|❌|[Okex](https://www.okex.com/)|
+|❌|[Orderbook](https://www.orderbook.io/)|
+|❌|[Poloniex](https://poloniex.com/)|
+|❌|[WEX](https://wex.nz/)|
+|❌|[Yobit](https://yobit.net/)|
+
 ### Current test coverage
-```bash
-❯ make test
-go test -cover ./...
-?       github.com/fberrez/romantic-aggregator/currency [no test files]
-?       github.com/fberrez/romantic-aggregator/exchange [no test files]
-ok      github.com/fberrez/romantic-aggregator/exchange/gdax    (cached)        coverage: 63.1% of statements
-?       github.com/fberrez/romantic-aggregator/kafka    [no test files]
-?       github.com/fberrez/romantic-aggregator/romantic-aggregator      [no test files]
-```
+**WIP**
 
 ## How can I use it ?
 

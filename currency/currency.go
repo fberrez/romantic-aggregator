@@ -96,3 +96,20 @@ func (c CurrencySlice) ToBitfinex() ([]string, error) {
 
 	return result, nil
 }
+
+// Converts a currecy slice to string
+func (c CurrencySlice) ToString() string {
+	text := ""
+
+	for _, cp := range c {
+
+		if text == "" {
+			text = fmt.Sprintf("%s", *cp)
+			continue
+		}
+
+		text = fmt.Sprintf("%s - %s", text, *cp)
+	}
+
+	return text
+}

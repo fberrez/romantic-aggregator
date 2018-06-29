@@ -97,6 +97,12 @@ func (fg *FetcherGroup) Start() {
 func (fg *FetcherGroup) SendMessage(isSubscribe bool, productIds currency.CurrencySlice, channels []string) []error {
 	errors := []error{}
 
+	log.WithFields(logrus.Fields{
+		"subscribe":   isSubscribe,
+		"product_ids": productIds.ToString(),
+		"channels":    channels,
+	}).Info("Update subscriptions")
+
 	for index, fetcher := range fg.fetchers {
 		formattedCurrencie, err := fetcher.TranslateCurrency(productIds)
 
@@ -117,6 +123,7 @@ func (fg *FetcherGroup) SendMessage(isSubscribe bool, productIds currency.Curren
 }
 
 func (fg *FetcherGroup) Stop() {
+	log.Info("Closing exchanges")
 	for _, fetcher := range fg.fetchers {
 		fetcher.Interrupt()
 	}

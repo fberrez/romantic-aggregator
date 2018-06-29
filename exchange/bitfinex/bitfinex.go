@@ -249,7 +249,7 @@ func (b *Bitfinex) manageSubscriptions(data []byte) (interface{}, error) {
 		b.manageUnsubscribe(response)
 	}
 
-	log.WithFields(logrus.Fields{"subscriptions": b.Subscriptions}).Infof("Current Subscriptions")
+	log.WithFields(logrus.Fields{"subscriptions": b.Subscriptions}).Debugf("Current Subscriptions")
 
 	return nil, nil
 }
@@ -373,7 +373,7 @@ func (b *Bitfinex) TranslateCurrency(c currency.CurrencySlice) ([]string, error)
 
 // Handles SIGINT
 func (b *Bitfinex) Interrupt() {
-	log.Infof("Closing Bitfinex")
+	log.Debug("Closing Bitfinex")
 	b.Proxy.Interrupt()
 	b.InterruptChannel <- true
 }

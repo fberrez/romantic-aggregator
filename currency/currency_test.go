@@ -86,3 +86,23 @@ func TestToBitfinex(t *testing.T) {
 		}
 	}
 }
+
+func TestToString(t *testing.T) {
+	tables := []struct {
+		slice  CurrencySlice
+		result string
+	}{
+		{CurrencySlice{BCHBTC, BTCEUR, BTCGBP}, "{BCH BTC} - {BTC EUR} - {BTC GBP}"},
+		{CurrencySlice{BCHBTC, BTCEUR, &currencyPair{"BTC", "LTC"}}, "{BCH BTC} - {BTC EUR} - {BTC LTC}"},
+		{CurrencySlice{&currencyPair{"BTC", "LTC"}}, "{BTC LTC}"},
+		{CurrencySlice{&currencyPair{"", ""}}, "{ }"},
+		{CurrencySlice{BTCEUR, &currencyPair{"", ""}}, "{BTC EUR} - { }"},
+	}
+
+	for _, table := range tables {
+		result := table.slice.ToString()
+
+		assert.Equal(t, table.result, result)
+	}
+
+}

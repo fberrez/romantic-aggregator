@@ -72,16 +72,16 @@ func (p *Proxy) Start() {
 		// If a new message arrives in the MessageChannel,
 		// it is sent to the websocket
 		case msg := <-p.MessageChannel:
-			p.log.WithFields(logrus.Fields{"message": string(msg)}).Infof("Sending message to Websocket")
+			p.log.WithFields(logrus.Fields{"message": string(msg)}).Debugf("Sending message to Websocket")
 			if err := p.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				p.log.WithFields(logrus.Fields{"error": err}).Infof("Error occured while sending message to Websocket")
+				p.log.WithFields(logrus.Fields{"error": err}).Errorf("Error occured while sending message to Websocket")
 				continue
 			}
 
 			// If a SIGINT is received, it closes the connection
 		case interrupt := <-p.InterruptChannel:
 			if interrupt {
-				p.log.Infof("Closing Websocket")
+				p.log.Debugf("Closing Websocket")
 				err := p.Conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 				if err != nil {
 					p.log.WithFields(logrus.Fields{"error": err}).Errorf("Error occured while closing the Websocket")
@@ -104,7 +104,7 @@ ListeningLoop:
 
 		if err != nil {
 			if !websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
-				p.log.WithFields(logrus.Fields{"message": err}).Infof("Websocket closed by client")
+				p.log.WithFields(logrus.Fields{"message": err}).Debugf("Websocket closed by client")
 				break ListeningLoop
 			}
 

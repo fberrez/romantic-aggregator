@@ -249,7 +249,7 @@ func (g *GDAX) manageSubscriptions(b []byte) (interface{}, error) {
 	// Updates current subscriptions in the proxy side
 	g.Proxy.Subscriptions = [][]byte{subscriptionMessageByte}
 
-	log.WithFields(logrus.Fields{"subscriptions": g.Subscriptions}).Infof("Current Subscriptions")
+	log.WithFields(logrus.Fields{"subscriptions": *g.Subscriptions}).Debug("Current Subscriptions")
 
 	return subscriptionMessage, nil
 }
@@ -295,7 +295,7 @@ func (g *GDAX) TranslateCurrency(c currency.CurrencySlice) ([]string, error) {
 
 // Handles SIGINT
 func (g *GDAX) Interrupt() {
-	log.Infof("Closing")
+	log.Debug("Closing GDAX")
 	g.Proxy.Interrupt()
 	g.InterruptChannel <- true
 }

@@ -2,13 +2,10 @@ package kafka
 
 import (
 	"encoding/json"
+	"os"
 
 	"github.com/Shopify/sarama"
 	"github.com/sirupsen/logrus"
-)
-
-const (
-	TopicAggregator string = "romantic-aggregator"
 )
 
 // Contains a sarama AsyncProducer
@@ -18,6 +15,7 @@ type AggregatorProducer struct {
 	Producer         sarama.AsyncProducer
 	Channel          chan interface{}
 	InterruptChannel chan bool
+	Topic            string
 }
 
 var (
@@ -27,15 +25,25 @@ var (
 // Initializes the Aggregator Producer
 func Initialize(addr string) (*AggregatorProducer, error) {
 	producer, err := sarama.NewAsyncProducer([]string{addr}, nil)
+
 	if err != nil {
 		return nil, err
+	}
+
+	topic := os.Getenv("KAFKA_TOPIC")
+
+	if topic == "" {
+		topic = "romantic-aggregator"
 	}
 
 	aggrProd := &AggregatorProducer{
 		Producer:         producer,
 		Channel:          make(chan interface{}),
 		InterruptChannel: make(chan bool),
+		Topic:            topic,
 	}
+
+	log.WithField("topic", topic).Info("Initializing Kafka producer...")
 
 	return aggrProd, nil
 }
@@ -80,7 +88,7 @@ func (p *AggregatorProducer) SendMessage(message interface{}) error {
 	// Builds the message struct
 	// which contains the topic name and the message
 	producerMess := &sarama.ProducerMessage{
-		Topic: TopicAggregator,
+		Topic: p.Topic,
 		Value: sarama.StringEncoder(string(marshalledMessage)),
 	}
 

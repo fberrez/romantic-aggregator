@@ -45,6 +45,7 @@ func Initiliaze() *Api {
 
 	f.GET("/openapi.json", nil, f.OpenAPI(infos, "json"))
 	f.GET("/ticker/:base/:target/:action", nil, tonic.Handler(api.subscribeHandler, 200))
+	f.GET("/timer/:new", nil, tonic.Handler(api.timerHandler, 200))
 
 	return api
 }
@@ -96,6 +97,7 @@ func (a *Api) Start(waitGroup sync.WaitGroup) {
 		defer waitGroup.Done()
 		a.aggregator.Start()
 	}()
+
 }
 
 // Stops api and its services (kafka producer, exchanges, aggregator)

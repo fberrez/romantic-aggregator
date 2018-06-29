@@ -106,7 +106,7 @@ List of exchanges
 
 ## How can I use it ?
 
-### Build
+### With Docker:
 
 First, you need to install [Docker](https://www.docker.com/) and [Docker-compose](https://docs.docker.com/compose/).
 
@@ -114,7 +114,7 @@ Then, when you're in the folder, use the terminal to perform these commands:
 
 1. Build the docker image:
 ```bash
-❯ make build
+❯ make docker-build
 ```
 
 3. Open another terminal (or another tab) and type:
@@ -124,10 +124,22 @@ Then, when you're in the folder, use the terminal to perform these commands:
 
 2. Go back in your first terminal and run:
 ```bash
+❯ make docker-run
+```
+
+### Without Docker:
+
+1. Start Kafka:
+```bash
+❯ make kafka
+```
+
+2. Open another terminal (or another tab) and type:
+```bash
 ❯ make run
 ```
 
-### API requests
+### API routes
 
 - Subscribe to a new channel
 ```bash
@@ -140,6 +152,13 @@ Then, when you're in the folder, use the terminal to perform these commands:
 ```
 
 Where `base` and `target` are a currency with a 3-letters format: BTC, USD, EUR, LTC, ETH...
+
+- Modify the timer duration
+```bash
+/timer/{newDuration}
+```
+
+Where `newDuration` can be : 1m,3m,5m,15m,30m,45m,1H,2H,3H,4H,1D,1W,1M
 
 ## What is a subscription ? How can I manage it ?
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/fberrez/romantic-aggregator/api"
 	"github.com/sirupsen/logrus"
@@ -17,17 +18,25 @@ var (
 func init() {
 	logrus.SetFormatter(&logrus.TextFormatter{})
 	logrus.SetOutput(os.Stdout)
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.InfoLevel)
 }
 
 func main() {
+	start := time.Now()
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
+
+	port := os.Getenv("API_PORT")
+
+	if port == "" {
+		port = "4242"
+	}
 
 	a := api.Initiliaze()
 
 	srv := &http.Server{
-		Addr:    ":4242",
+		Addr:    ":" + port,
 		Handler: a.Fizz,
 	}
 
@@ -54,6 +63,13 @@ func main() {
 		}
 	}()
 
-	srv.ListenAndServe()
+	log.WithField("port", ":"+port).Info("Launching server")
+	elapsed := time.Since(start)
+	log.Infof("Server started in %s", elapsed)
 
+	err := srv.ListenAndServe()
+
+	if err != nil && err.Error() != "http: Server closed" {
+		log.WithField("error", err).Errorf("An error occured while launching the server")
+	}
 }

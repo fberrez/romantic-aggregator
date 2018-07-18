@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fberrez/romantic-aggregator/aggregator"
 	"github.com/fberrez/romantic-aggregator/exchange"
@@ -14,16 +15,26 @@ import (
 	"github.com/wI2L/fizz/openapi"
 )
 
+// Contains each part of the aggregator
 type Api struct {
-	Fizz             *fizz.Fizz
-	producer         *kafka.AggregatorProducer
-	aggregator       *aggregator.Aggregator
-	FetcherGroup     *exchange.FetcherGroup
+	// It is the server which handling http routes of the API
+	Fizz *fizz.Fizz
+	// Contains exchanges informations and variables
+	FetcherGroup *exchange.FetcherGroup
+	// Receives the SIGINT
 	InterruptChannel []chan bool
+
+	producer   *kafka.AggregatorProducer
+	aggregator *aggregator.Aggregator
 }
 
 var (
-	log *logrus.Entry = logrus.WithFields(logrus.Fields{"element": "api"})
+	log = logrus.WithFields(logrus.Fields{"element": "api"})
+)
+
+const (
+	maxNumberOfTest = 5
+	initialDelay    = 2
 )
 
 // Initializes the api with a new struct and initialized routes
@@ -67,8 +78,22 @@ func InitializeProducer() *kafka.AggregatorProducer {
 
 	producer, err := kafka.Initialize(kafkaAddr)
 
-	if err != nil {
-		panic(err)
+	delay := initialDelay
+	currentNumberOfTestRemaining := maxNumberOfTest
+
+	// while an error occured when initializing the kafka producer,
+	// tries to reinitialize a new one until the number of test reach 0
+	for err != nil {
+		if currentNumberOfTestRemaining == 0 {
+			panic(err)
+		}
+
+		log.WithField("test-remaining", currentNumberOfTestRemaining).Warningf("Initializing the kafka producer failed. Retrying in %d seconds", delay)
+		time.Sleep(time.Duration(delay) * time.Second)
+
+		producer, err = kafka.Initialize(kafkaAddr)
+		currentNumberOfTestRemaining--
+		delay *= 2
 	}
 
 	return producer

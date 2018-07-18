@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	uri url.URL       = url.URL{Scheme: "wss", Host: "ws-feed.gdax.com", Path: "/"}
+	uri url.URL       = url.URL{Scheme: "wss", Host: "ws-feed.pro.coinbase.com", Path: "/"}
 	log *logrus.Entry = logrus.WithFields(logrus.Fields{"element": "exchange", "label": "GDAX"})
 )
 
@@ -187,7 +187,7 @@ func getVolume(symbol string) (float64, error) {
 		Timeout: time.Second * 10,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("https://api.gdax.com/products/%s/ticker", symbol))
+	resp, err := client.Get(fmt.Sprintf("https://api.pro.coinbase.com/products/%s/ticker", symbol))
 
 	if err != nil {
 		return 0.0, errors.Annotatef(err, "tried to get volume of %s", symbol)

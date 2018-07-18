@@ -106,38 +106,35 @@ List of exchanges
 
 ## How can I use it ?
 
-### With Docker:
-
 First, you need to install [Docker](https://www.docker.com/) and [Docker-compose](https://docs.docker.com/compose/).
+
+### Production environment:
 
 Then, when you're in the folder, use the terminal to perform these commands:
 
-1. Build the docker image:
-```bash
-❯ make docker-build
-```
-
-3. Open another terminal (or another tab) and type:
-```bash
-❯ make kafka
-```
-
-2. Go back in your first terminal and run:
+Run the lastest docker image push on [Docker Hub](https://hub.docker.com):
 ```bash
 ❯ make docker-run
 ```
 
-### Without Docker:
+### Development environment:
 
 1. Start Kafka:
 ```bash
-❯ make kafka
+❯ make dev-start
 ```
 
-2. Open another terminal (or another tab) and type:
+2. Run it with go run:
 ```bash
 ❯ make run
 ```
+
+3. When you are done, stop the kafka and zookeeper containers with:
+```bash
+❯ make dev-stop
+```
+
+See Makefile for more details.
 
 ### API routes
 

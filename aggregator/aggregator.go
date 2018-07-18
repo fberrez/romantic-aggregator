@@ -32,9 +32,6 @@ type Aggregator struct {
 	// Array which contains averages of received tickers
 	tickers []*Ticker
 
-	//  Time of the last update
-	lastUpdate time.Time
-
 	// Channel which receives a ticker to add to the array of tickers
 	AggregatorChannel chan SimpleTicker
 
@@ -55,11 +52,12 @@ type Aggregator struct {
 
 // Struct which contains the average values ​​of each ticker received
 type Ticker struct {
-	Symbol string  `json:"symbol"`
-	Price  float64 `json:"price"`
-	Bid    float64 `json:"bid"`
-	Ask    float64 `json:"ask"`
-	Volume float64 `json:"volume"`
+	Symbol     string    `json:"symbol"`
+	Price      float64   `json:"price"`
+	Bid        float64   `json:"bid"`
+	Ask        float64   `json:"ask"`
+	Volume     float64   `json:"volume"`
+	LastUpdate time.Time `json:"last_update"`
 }
 
 // Interval between each messages sent to kafka producer
@@ -93,7 +91,6 @@ func Initialize(kafkaChan chan interface{}) *Aggregator {
 	aggregator := &Aggregator{
 		intervalChannel:   make(chan Interval),
 		tickers:           []*Ticker{},
-		lastUpdate:        time.Now(),
 		AggregatorChannel: make(chan SimpleTicker),
 		interruptChannel:  make(chan bool),
 		kafkaChannel:      kafkaChan,
@@ -152,6 +149,7 @@ func (a *Aggregator) makeAverage(t SimpleTicker) {
 	currentTicker.Bid = (currentTicker.Bid*currentTicker.Volume + t.Bid*t.Volume) / (currentTicker.Volume + t.Volume)
 	currentTicker.Ask = (currentTicker.Ask*currentTicker.Volume + t.Ask*t.Volume) / (currentTicker.Volume + t.Volume)
 	currentTicker.Volume = (currentTicker.Volume + t.Volume) / 2
+	currentTicker.LastUpdate = time.Now()
 
 	log.WithFields(logrus.Fields{"ticker": currentTicker}).Debug("Ticker Calculated")
 }

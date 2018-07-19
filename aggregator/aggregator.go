@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"math"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -52,11 +53,28 @@ type Aggregator struct {
 
 // Struct which contains the average values ​​of each ticker received
 type Ticker struct {
-	Symbol     string    `json:"symbol"`
-	Price      float64   `json:"price"`
-	Bid        float64   `json:"bid"`
-	Ask        float64   `json:"ask"`
-	Volume     float64   `json:"volume"`
+	// Symbol of the currency pair (ex: BTCUSD)
+	Symbol string `json:"symbol"`
+
+	// Average price
+	Price float64 `json:"price"`
+
+	// High price of the period
+	High float64 `json:"high"`
+
+	// Lowest price of the period
+	Low float64 `json:"low"`
+
+	// Average Bid
+	Bid float64 `json:"bid"`
+
+	// Average Ask
+	Ask float64 `json:"ask"`
+
+	// Average Volume
+	Volume float64 `json:"volume"`
+
+	// Date and time of the last update
 	LastUpdate time.Time `json:"last_update"`
 }
 
@@ -120,6 +138,7 @@ AggregatorLoop:
 				log.WithField("ticker", *ticker).Infof("Send Ticker to Kafka at %v", t)
 				a.kafkaChannel <- ticker
 			}
+			a.tickers = []*Ticker{}
 
 		// Updates timer
 		case interval := <-a.intervalChannel:
@@ -151,6 +170,14 @@ func (a *Aggregator) makeAverage(t SimpleTicker) {
 	currentTicker.Volume = (currentTicker.Volume + t.Volume) / 2
 	currentTicker.LastUpdate = time.Now()
 
+	if t.Price > currentTicker.High {
+		currentTicker.High = t.Price
+	}
+
+	if t.Price < currentTicker.Low {
+		currentTicker.Low = t.Price
+	}
+
 	log.WithFields(logrus.Fields{"ticker": currentTicker}).Debug("Ticker Calculated")
 }
 
@@ -165,6 +192,8 @@ func (a *Aggregator) findTicker(t SimpleTicker) *Ticker {
 	newTicker := &Ticker{
 		Symbol: t.Symbol,
 		Price:  t.Price,
+		High:   0,
+		Low:    math.MaxFloat64,
 		Bid:    t.Bid,
 		Ask:    t.Ask,
 		Volume: t.Volume,

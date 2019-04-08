@@ -33,13 +33,12 @@ services:
   romantic-aggregator:
     build: .
     image: fberrez/romantic-aggregator
-    network_mode: host
     ports:
       - "4242:4242"
     environment:
         GIN_MODE: release
         API_PORT: 4242
-        KAFKA_ADDRESS: 127.0.0.1:9092
+        KAFKA_ADDRESS: kafka:9092
         KAFKA_TOPIC: romantic-aggregator
     depends_on:
       - "zookeeper"

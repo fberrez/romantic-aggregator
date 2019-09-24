@@ -27,7 +27,7 @@ docker-run:
 
 # Starts containers which contain zookeeper and kafka
 dev-start:
-	docker-compose start zookeeper kafka
+	docker-compose up -d zookeeper kafka
 
 # Stops containers which contain zookeeper and kafka
 dev-stop:

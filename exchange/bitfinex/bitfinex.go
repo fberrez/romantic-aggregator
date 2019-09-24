@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	uri url.URL       = url.URL{Scheme: "wss", Host: "api.bitfinex.com", Path: "/ws"}
+	uri url.URL       = url.URL{Scheme: "wss", Host: "api.bitfinex.com", Path: "/ws/2"}
 	log *logrus.Entry = logrus.WithFields(logrus.Fields{"element": "exchange", "label": "Bitfinex"})
 )
 
@@ -132,7 +132,6 @@ func (b *Bitfinex) NewMessage(isSubscription bool, symbols []string, channels []
 // Parses the response received to a JSON struct
 func (b *Bitfinex) makeResponse(data []byte) (interface{}, error) {
 	byteString := string(data)
-
 	switch byteString[0] {
 	// a '[' is the first character of a ticker response
 	case '[':
@@ -148,12 +147,20 @@ func (b *Bitfinex) makeResponse(data []byte) (interface{}, error) {
 // Builds the response sent by the websocket to the client
 func (b *Bitfinex) makeTickerResponse(data []byte) (*TickerResponse, error) {
 	byteString := string(data)
-	// Removes the first and the last character of the response which are "[]"
+	// Removes the first and the last character of the response which are "[" and "]"
 	byteString = byteString[1:]
 	byteString = byteString[:len(byteString)-1]
 
 	// Splits the string
 	response := strings.Split(byteString, ",")
+
+	// Removes useless brackets fromt the strings
+	for i, v := range response {
+		v = strings.Replace(v, "[", "", -1)
+		v = strings.Replace(v, "]", "", -1)
+		response[i] = v
+	}
+
 	// If the first element of the array is "hb",
 	// it means that there is nothing new
 	if response[1] == "hb" || len(response) != 11 {

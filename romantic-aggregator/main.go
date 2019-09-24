@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fberrez/romantic-aggregator/api"
+	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,9 +17,30 @@ var (
 )
 
 func init() {
-	logrus.SetFormatter(&logrus.TextFormatter{})
-	logrus.SetOutput(os.Stdout)
-	logrus.SetLevel(logrus.InfoLevel)
+	env := os.Getenv("ENVIRONMENT")
+
+	if env == "" || env == "DEV" {
+		// Log as the default ASCII formatter.
+		logrus.SetFormatter(&logrus.TextFormatter{})
+
+		// Output to stdout instead of the default stderr
+		logrus.SetOutput(os.Stdout)
+
+		// Log all messages.
+		logrus.SetLevel(logrus.DebugLevel)
+	} else if env == "PROD" {
+		// Log as JSON instead of the default ASCII formatter.
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+
+		// Output to stdout instead of the default stderr
+		logrus.SetOutput(os.Stdout)
+
+		// Only log the info severity or above.
+		logrus.SetLevel(logrus.InfoLevel)
+
+		// Sets mode of the API on release mode.
+		gin.SetMode(gin.ReleaseMode)
+	}
 }
 
 func main() {
